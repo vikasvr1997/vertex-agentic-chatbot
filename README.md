@@ -119,6 +119,16 @@ Then set `BIGQUERY_DEFAULT_DATASET=your_dataset` in `.env` and restart the
 API. The orchestrator will start classifying messages and routing
 data-shaped questions to the BigQuery agent.
 
+### Going further: separate, A2A-connected GCP agents
+
+The orchestrator/BigQuery agent above run in-process. If you need them (plus
+a GCS data agent) as independently deployed, independently scaled Vertex AI
+agents talking over the Agent2Agent (A2A) protocol — e.g. for per-agent IAM
+isolation or reuse by other orchestrators — see
+`docs/gcp-multi-agent-a2a-setup.md` for the full walkthrough (ADK agent
+code, IAM tables, A2A wiring, Agentspace registration) and
+`.agents/skills/deploy-multi-agent-a2a/SKILL.md` for the condensed runbook.
+
 ## Testing
 
 ```bash
