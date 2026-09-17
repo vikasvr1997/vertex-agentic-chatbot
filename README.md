@@ -4,6 +4,10 @@ Enterprise conversational agentic chatbot backed by Google Cloud Vertex AI,
 with both Streamlit and Chainlit frontends sharing one authenticated FastAPI
 backend.
 
+See [TODO.md](TODO.md) for the known gaps between "the agent works" and
+"this is production-ready" (session persistence, per-user auth, rate
+limiting, evaluation harness, etc.).
+
 ## Key design decisions
 
 - **ADC only, no API keys.** All Vertex AI connectivity goes through
