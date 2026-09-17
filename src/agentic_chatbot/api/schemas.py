@@ -46,3 +46,7 @@ class StatusResponse(BaseModel):
     vertex_model_name: str
     backend_mode: str
     bigquery_dataset: str | None
+
+
+class RefreshSchemaResponse(BaseModel):
+    status: str

@@ -49,3 +49,20 @@ def get_status() -> dict[str, Any] | None:
         return dict(response.json())
     except httpx.HTTPError:
         return None
+
+
+def refresh_schema() -> bool:
+    """Clear the backend's cached BigQuery schema so the next data question
+    re-fetches table/column info. Returns False on any failure rather than
+    raising — this is a convenience action, not a critical path."""
+    settings = get_settings()
+    try:
+        response = httpx.post(
+            f"{settings.backend_url}/schema/refresh",
+            headers={"Authorization": f"Bearer {settings.internal_api_token}"},
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        return True
+    except httpx.HTTPError:
+        return False

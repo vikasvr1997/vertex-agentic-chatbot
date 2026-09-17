@@ -73,3 +73,4 @@ def get_orchestrator() -> Orchestrator:
 ConversationManagerDep = Annotated[ConversationManager, Depends(get_conversation_manager)]
 VertexAgentClientDep = Annotated[VertexAgentClient, Depends(get_vertex_client)]
 OrchestratorDep = Annotated[Orchestrator, Depends(get_orchestrator)]
+BigQueryServiceDep = Annotated[BigQueryService, Depends(get_bigquery_service)]

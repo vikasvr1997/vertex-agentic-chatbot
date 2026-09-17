@@ -7,6 +7,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from agentic_chatbot.api.routes.chat import router as chat_router
+from agentic_chatbot.api.routes.schema import router as schema_router
 from agentic_chatbot.api.routes.status import router as status_router
 from agentic_chatbot.api.schemas import HealthResponse
 from agentic_chatbot.config import get_settings
@@ -26,6 +27,7 @@ app = FastAPI(
 
 app.include_router(chat_router)
 app.include_router(status_router)
+app.include_router(schema_router)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["ops"])

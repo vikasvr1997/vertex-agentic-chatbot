@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from agentic_chatbot.agents.orchestrator import OrchestratorResult
 from agentic_chatbot.api import deps
 from agentic_chatbot.api.server import app
-from agentic_chatbot.core.conversation import ConversationManager
+from agentic_chatbot.core.conversation import ConversationManager, Session
 
 
 class _FakeOrchestrator:
@@ -14,9 +14,9 @@ class _FakeOrchestrator:
         self.calls: list[tuple[str, str, str | None]] = []
 
     def handle(
-        self, session_id: str, message: str, model_override: str | None = None
+        self, session: Session, message: str, model_override: str | None = None
     ) -> OrchestratorResult:
-        self.calls.append((session_id, message, model_override))
+        self.calls.append((session.session_id, message, model_override))
         return OrchestratorResult(reply=f"fake-reply: {message}")
 
 
@@ -109,3 +109,27 @@ def test_status_endpoint_returns_config(client: TestClient) -> None:
     assert body["google_cloud_project"] == "test-project"
     assert body["backend_mode"] == "gemini_model"
     assert body["bigquery_dataset"] is None
+
+
+class _FakeBigQueryService:
+    def __init__(self) -> None:
+        self.cleared = False
+
+    def clear_schema_cache(self) -> None:
+        self.cleared = True
+
+
+def test_schema_refresh_requires_auth(client: TestClient) -> None:
+    response = client.post("/schema/refresh")
+    assert response.status_code in (401, 403)
+
+
+def test_schema_refresh_clears_cache(client: TestClient) -> None:
+    fake_service = _FakeBigQueryService()
+    app.dependency_overrides[deps.get_bigquery_service] = lambda: fake_service
+
+    response = client.post("/schema/refresh", headers={"Authorization": "Bearer test-token"})
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "cleared"}
+    assert fake_service.cleared is True

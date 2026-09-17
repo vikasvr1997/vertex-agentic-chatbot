@@ -5,8 +5,9 @@
 Uses Chainlit's `ChatSettings` as the sidebar-equivalent config panel, and
 renders the backend's structured `{reply, generated_query, table, chart}`
 response as side-panel elements: the generated SQL as a code block, the
-result rows as a markdown table, and the chart as an inline Plotly figure —
-using the same `rendering.py` chart builder the Streamlit app uses.
+result rows as a markdown table + CSV download, and the chart as an inline
+Plotly figure — using the same `rendering.py` chart builder the Streamlit
+app uses.
 """
 
 from __future__ import annotations
@@ -15,7 +16,11 @@ import chainlit as cl
 from chainlit.input_widget import InputWidget, Select
 
 from agentic_chatbot.frontend.backend_client import get_status, send_message
-from agentic_chatbot.frontend.rendering import build_plotly_figure, rows_to_markdown_table
+from agentic_chatbot.frontend.rendering import (
+    build_plotly_figure,
+    rows_to_csv_bytes,
+    rows_to_markdown_table,
+)
 
 _CURATED_MODELS = [
     "(use backend default)",
@@ -85,6 +90,14 @@ async def on_message(message: cl.Message) -> None:
     if table:
         elements.append(
             cl.Text(name="Result table", content=rows_to_markdown_table(table), display="side")
+        )
+        elements.append(
+            cl.File(
+                name="query_results.csv",
+                content=rows_to_csv_bytes(table),
+                mime="text/csv",
+                display="inline",
+            )
         )
 
     chart = result.get("chart")

@@ -48,6 +48,21 @@ paths:
                 $ref: '#/components/schemas/StatusResponse'
       security:
       - HTTPBearer: []
+  /schema/refresh:
+    post:
+      tags:
+      - ops
+      summary: Refresh Schema
+      operationId: refresh_schema_schema_refresh_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshSchemaResponse'
+      security:
+      - HTTPBearer: []
   /health:
     get:
       tags:
@@ -150,6 +165,15 @@ components:
       - status
       - environment
       title: HealthResponse
+    RefreshSchemaResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+      type: object
+      required:
+      - status
+      title: RefreshSchemaResponse
     StatusResponse:
       properties:
         google_cloud_project:

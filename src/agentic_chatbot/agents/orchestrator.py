@@ -5,6 +5,14 @@ the user's conversation history) rather than keyword matching, so it
 generalizes past a fixed phrase list. If no BigQuery dataset is configured,
 classification is skipped entirely and every message goes to chat — this
 keeps the app usable out of the box with Vertex AI alone.
+
+When a BigQuery query returns rows but nothing chartable was found (see
+``services.chart_utils.infer_chart``), the reply is appended with a
+follow-up offer ("would you like a chart?") and the rows are remembered on
+the session. The *next* message is checked for an affirmative reply before
+falling through to normal classification — this is a simple keyword
+heuristic, not another model call, since it only has to distinguish
+"yes" from "anything else".
 """
 
 from __future__ import annotations
@@ -14,6 +22,7 @@ from dataclasses import dataclass
 from agentic_chatbot.agents.bigquery_agent import BigQueryAgent
 from agentic_chatbot.agents.chat_agent import ChatAgent
 from agentic_chatbot.config import Settings
+from agentic_chatbot.core.conversation import Session
 from agentic_chatbot.core.vertex_client import VertexAgentClient
 from agentic_chatbot.logging_config import get_logger
 from agentic_chatbot.services.chart_utils import infer_chart
@@ -30,6 +39,31 @@ querying data.
 
 Message: {message}
 Answer:"""
+
+_CHART_OFFER_TEXT = "\n\nWould you like me to generate a sample chart for this data?"
+
+_AFFIRMATIVE_PHRASES = {
+    "y",
+    "yes",
+    "yeah",
+    "yep",
+    "yup",
+    "sure",
+    "ok",
+    "okay",
+    "please",
+    "please do",
+    "go ahead",
+    "do it",
+}
+_AFFIRMATIVE_KEYWORDS = ("yes", "yeah", "yep", "yup", "sure", "please", "chart", "plot", "graph")
+
+
+def _is_affirmative(message: str) -> bool:
+    normalized = message.strip().lower().rstrip(".!")
+    if normalized in _AFFIRMATIVE_PHRASES:
+        return True
+    return any(keyword in normalized for keyword in _AFFIRMATIVE_KEYWORDS)
 
 
 @dataclass
@@ -54,24 +88,67 @@ class Orchestrator:
         self._settings = settings
 
     def handle(
-        self, session_id: str, message: str, model_override: str | None = None
+        self, session: Session, message: str, model_override: str | None = None
     ) -> OrchestratorResult:
+        if session.pending_chart_offer:
+            session.pending_chart_offer = False
+            if _is_affirmative(message):
+                return self._followup_chart(session)
+            # Not an answer to the offer — treat as a fresh message below.
+
         if not self._settings.bigquery_default_dataset:
-            reply = self._chat_agent.reply(session_id, message, model_override=model_override)
+            reply = self._chat_agent.reply(
+                session.session_id, message, model_override=model_override
+            )
             return OrchestratorResult(reply=reply)
 
         if self._classify(message) == "SQL":
-            result = self._bigquery_agent.answer(message)
-            chart = infer_chart(result.table) if result.table else None
+            return self._handle_sql(session, message)
+
+        reply = self._chat_agent.reply(session.session_id, message, model_override=model_override)
+        return OrchestratorResult(reply=reply)
+
+    def _handle_sql(self, session: Session, message: str) -> OrchestratorResult:
+        result = self._bigquery_agent.answer(message)
+        chart = infer_chart(result.table) if result.table else None
+        reply = result.reply
+
+        if result.table and chart is None:
+            session.pending_chart_offer = True
+            session.last_query_rows = result.table
+            session.last_query_sql = result.generated_query
+            reply = f"{reply}{_CHART_OFFER_TEXT}"
+
+        return OrchestratorResult(
+            reply=reply,
+            generated_query=result.generated_query,
+            table=result.table,
+            chart=chart,
+        )
+
+    def _followup_chart(self, session: Session) -> OrchestratorResult:
+        rows = session.last_query_rows
+        sql = session.last_query_sql
+        session.last_query_rows = None
+        session.last_query_sql = None
+
+        if not rows:
             return OrchestratorResult(
-                reply=result.reply,
-                generated_query=result.generated_query,
-                table=result.table,
-                chart=chart,
+                reply="I don't have a previous result to chart anymore — ask me a data question first."
             )
 
-        reply = self._chat_agent.reply(session_id, message, model_override=model_override)
-        return OrchestratorResult(reply=reply)
+        chart = infer_chart(rows)
+        if chart is None:
+            return OrchestratorResult(
+                reply=(
+                    "That result doesn't have enough structure to chart (e.g. it's a "
+                    "single value) — try a question that returns multiple rows or categories."
+                )
+            )
+
+        return OrchestratorResult(
+            reply="Here's a chart of that data.", generated_query=sql, table=rows, chart=chart
+        )
 
     def _classify(self, message: str) -> str:
         try:

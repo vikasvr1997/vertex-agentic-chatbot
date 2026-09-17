@@ -36,6 +36,18 @@ limiting, evaluation harness, etc.).
   the model or a caller supplied something else — on top of the ADC
   identity itself being granted only `roles/bigquery.dataViewer` +
   `roles/bigquery.jobUser`. See `src/agentic_chatbot/services/bigquery_service.py`.
+- **Chart type is chosen from the data's shape, not fixed to bar.**
+  `services/chart_utils.infer_chart` picks line (date + numeric), bar
+  (categorical + numeric, or a value-count distribution for categorical-only
+  results), or scatter (two numeric columns). When nothing is chartable
+  (e.g. a single scalar answer), the reply ends with a follow-up offer;
+  saying "yes" on the next turn re-runs the same chooser against the
+  remembered rows — see `Orchestrator._handle_sql`/`_followup_chart`.
+- **Chat history is per-browser-tab, not persisted server-side.** Streamlit
+  keeps a Claude-style conversation list (switch/delete) in
+  `st.session_state`; Chainlit does not currently have a persisted/resumable
+  thread history — that's deliberately out of scope for now (it would need
+  a database and a login, see the note in `TODO.md`).
 
 ## Project layout
 

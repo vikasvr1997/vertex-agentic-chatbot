@@ -20,6 +20,14 @@ class Session:
     last_active_at: float = field(default_factory=time.time)
     turn_count: int = 0
 
+    # State for the "would you like a sample chart?" follow-up: set when a
+    # BigQuery query returned rows but no chart could be auto-inferred, so
+    # the next turn can be checked for an affirmative reply before falling
+    # back to normal intent classification. See agents/orchestrator.py.
+    pending_chart_offer: bool = False
+    last_query_rows: list[dict[str, object]] | None = None
+    last_query_sql: str | None = None
+
 
 class ConversationManager:
     def __init__(self) -> None:

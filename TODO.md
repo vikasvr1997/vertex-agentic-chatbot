@@ -67,3 +67,17 @@ one actually breaks something.
 - [ ] User feedback loop on answers (thumbs up/down) to build the golden
       eval set from real usage instead of only hand-written cases.
 - [ ] Incident-response runbook once this has real users depending on it.
+- [ ] **Persisted, resumable Chainlit thread history** (Claude-style list
+      with delete) is a natural companion to the per-user identity item
+      above, and Chainlit supports it natively via
+      `chainlit.data.sql_alchemy.SQLAlchemyDataLayer`. Deliberately not
+      built yet — it requires adding a Postgres service and a login
+      (`@cl.password_auth_callback`) to what's currently a login-free,
+      infra-free frontend, and that trade-off was explicitly deferred
+      rather than added silently. If/when this is revisited: the official
+      schema is at https://docs.chainlit.io/data-layers/sqlalchemy (Postgres
+      only — its `tags` columns bind native arrays, which breaks under
+      SQLite/aiosqlite), and Chainlit ships a GCS storage client
+      (`chainlit.data.storage_clients.gcs.GCSStorageClient`) that uses ADC
+      like the rest of this app, for persisting file-element attachments
+      (e.g. the CSV export) across resumed threads.

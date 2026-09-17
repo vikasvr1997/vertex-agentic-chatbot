@@ -26,7 +26,7 @@ def send_chat_message(
     session = conversations.get_or_create(payload.session_id)
     model_override = (payload.settings or {}).get("model")
 
-    result = orchestrator.handle(session.session_id, payload.message, model_override=model_override)
+    result = orchestrator.handle(session, payload.message, model_override=model_override)
 
     conversations.touch(session.session_id)
     logger.info(

@@ -118,3 +118,9 @@ class BigQueryService:
 
         self._schema_cache = schema_text
         return schema_text
+
+    def clear_schema_cache(self) -> None:
+        """Force the next `describe_dataset` call to re-fetch from
+        INFORMATION_SCHEMA — used by the "Refresh schema" UI action after
+        tables are added/changed."""
+        self._schema_cache = None

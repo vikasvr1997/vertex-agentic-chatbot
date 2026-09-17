@@ -5,6 +5,7 @@ import pytest
 from agentic_chatbot.agents.bigquery_agent import BigQueryAgentResult
 from agentic_chatbot.agents.orchestrator import Orchestrator
 from agentic_chatbot.config import get_settings
+from agentic_chatbot.core.conversation import Session
 
 
 class _FakeVertexClient:
@@ -53,7 +54,7 @@ def test_orchestrator_skips_classification_when_no_dataset_configured() -> None:
         classification="SQL", bigquery_result=BigQueryAgentResult("x", None, None), dataset=""
     )
 
-    result = orchestrator.handle("s1", "how many rows?")
+    result = orchestrator.handle(Session(session_id="s1"), "how many rows?")
 
     assert result.reply == "chat-reply: how many rows?"
     assert chat_agent.calls == [("s1", "how many rows?", None)]
@@ -70,7 +71,7 @@ def test_orchestrator_routes_to_bigquery_agent_on_sql_classification() -> None:
         classification="SQL", bigquery_result=bq_result, dataset="my_dataset"
     )
 
-    result = orchestrator.handle("s1", "how many rows per category?")
+    result = orchestrator.handle(Session(session_id="s1"), "how many rows per category?")
 
     assert result.reply == "Found 2 row(s)."
     assert result.generated_query == "SELECT category, count FROM t"
@@ -87,7 +88,9 @@ def test_orchestrator_routes_to_chat_agent_on_chat_classification() -> None:
         dataset="my_dataset",
     )
 
-    result = orchestrator.handle("s1", "hello there", model_override="gemini-2.5-pro")
+    result = orchestrator.handle(
+        Session(session_id="s1"), "hello there", model_override="gemini-2.5-pro"
+    )
 
     assert result.reply == "chat-reply: hello there"
     assert chat_agent.calls == [("s1", "hello there", "gemini-2.5-pro")]
@@ -105,10 +108,104 @@ def test_orchestrator_falls_back_to_chat_when_classification_raises() -> None:
     bigquery_agent = _FakeBigQueryAgent(BigQueryAgentResult("x", None, None))
     orchestrator = Orchestrator(_RaisingVertexClient(), chat_agent, bigquery_agent, settings)
 
-    result = orchestrator.handle("s1", "hello")
+    result = orchestrator.handle(Session(session_id="s1"), "hello")
 
     assert result.reply == "chat-reply: hello"
     assert bigquery_agent.questions == []
+
+
+def test_orchestrator_offers_chart_when_none_could_be_inferred() -> None:
+    # A single scalar row (e.g. "how many drivers?") has nothing chartable.
+    bq_result = BigQueryAgentResult(
+        reply="There are 150 drivers.",
+        generated_query="SELECT COUNT(*) AS n FROM drivers",
+        table=[{"n": 150}],
+    )
+    orchestrator, _, _ = _make_orchestrator(
+        classification="SQL", bigquery_result=bq_result, dataset="my_dataset"
+    )
+    session = Session(session_id="s1")
+
+    result = orchestrator.handle(session, "how many drivers?")
+
+    assert "Would you like me to generate a sample chart" in result.reply
+    assert result.chart is None
+    assert session.pending_chart_offer is True
+    assert session.last_query_rows == [{"n": 150}]
+
+
+def test_orchestrator_does_not_offer_chart_when_one_was_already_shown() -> None:
+    bq_result = BigQueryAgentResult(
+        reply="Found 2 row(s).",
+        generated_query="SELECT category, count FROM t",
+        table=[{"category": "a", "count": 3}, {"category": "b", "count": 5}],
+    )
+    orchestrator, _, _ = _make_orchestrator(
+        classification="SQL", bigquery_result=bq_result, dataset="my_dataset"
+    )
+    session = Session(session_id="s1")
+
+    result = orchestrator.handle(session, "counts by category")
+
+    assert "Would you like" not in result.reply
+    assert result.chart is not None
+    assert session.pending_chart_offer is False
+
+
+def test_orchestrator_builds_chart_on_affirmative_followup() -> None:
+    bq_result = BigQueryAgentResult(reply="unused", generated_query="unused", table=[{"n": 1}])
+    orchestrator, chat_agent, bigquery_agent = _make_orchestrator(
+        classification="SQL", bigquery_result=bq_result, dataset="my_dataset"
+    )
+    session = Session(
+        session_id="s1",
+        pending_chart_offer=True,
+        last_query_rows=[{"category": "a", "count": 3}, {"category": "b", "count": 5}],
+        last_query_sql="SELECT category, count FROM t",
+    )
+
+    result = orchestrator.handle(session, "yes please")
+
+    assert result.chart is not None
+    assert result.chart["type"] == "bar"
+    assert result.table == [{"category": "a", "count": 3}, {"category": "b", "count": 5}]
+    assert result.generated_query == "SELECT category, count FROM t"
+    assert session.pending_chart_offer is False
+    assert session.last_query_rows is None
+    # The follow-up is fully handled without touching classification or the
+    # BigQuery agent again.
+    assert chat_agent.calls == []
+    assert bigquery_agent.questions == []
+
+
+def test_orchestrator_explains_when_followup_data_still_not_chartable() -> None:
+    orchestrator, _, _ = _make_orchestrator(
+        classification="SQL",
+        bigquery_result=BigQueryAgentResult("x", None, None),
+        dataset="my_dataset",
+    )
+    session = Session(session_id="s1", pending_chart_offer=True, last_query_rows=[{"n": 150}])
+
+    result = orchestrator.handle(session, "yes")
+
+    assert "doesn't have enough structure" in result.reply
+    assert result.chart is None
+    assert session.pending_chart_offer is False
+
+
+def test_orchestrator_treats_non_affirmative_followup_as_a_new_message() -> None:
+    orchestrator, chat_agent, _ = _make_orchestrator(
+        classification="CHAT",
+        bigquery_result=BigQueryAgentResult("x", None, None),
+        dataset="my_dataset",
+    )
+    session = Session(session_id="s1", pending_chart_offer=True, last_query_rows=[{"n": 150}])
+
+    result = orchestrator.handle(session, "no thanks, what's the capital of France?")
+
+    assert result.reply == "chat-reply: no thanks, what's the capital of France?"
+    assert session.pending_chart_offer is False
+    assert chat_agent.calls == [("s1", "no thanks, what's the capital of France?", None)]
 
 
 @pytest.fixture(autouse=True)

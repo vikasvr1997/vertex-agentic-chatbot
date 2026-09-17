@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from agentic_chatbot.services.bigquery_service import ReadOnlyQueryError, validate_read_only
+from agentic_chatbot.config import get_settings
+from agentic_chatbot.services.bigquery_service import (
+    BigQueryService,
+    ReadOnlyQueryError,
+    validate_read_only,
+)
 
 
 @pytest.mark.parametrize(
@@ -47,3 +52,44 @@ def test_validate_read_only_rejects_select_smuggling_write_keyword() -> None:
     # A SELECT that references a column/table literally named e.g. "drop_rate"
     # should still pass — the guardrail matches whole words, not substrings.
     validate_read_only("SELECT drop_rate FROM dataset.table")
+
+
+class _FakeJob:
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        self._rows = rows
+
+    def result(self, timeout: float | None = None, max_results: int | None = None) -> list[dict]:
+        return self._rows
+
+
+class _FakeBigQueryClient:
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        self.rows = rows
+        self.queries: list[str] = []
+
+    def query(self, sql: str, job_config: object = None) -> _FakeJob:
+        self.queries.append(sql)
+        return _FakeJob(self.rows)
+
+
+def test_describe_dataset_caches_schema() -> None:
+    rows = [{"table_name": "t", "column_name": "id", "data_type": "INT64"}]
+    client = _FakeBigQueryClient(rows)
+    service = BigQueryService(get_settings(), client=client)
+
+    service.describe_dataset("ds")
+    service.describe_dataset("ds")
+
+    assert len(client.queries) == 1
+
+
+def test_clear_schema_cache_forces_refetch() -> None:
+    rows = [{"table_name": "t", "column_name": "id", "data_type": "INT64"}]
+    client = _FakeBigQueryClient(rows)
+    service = BigQueryService(get_settings(), client=client)
+
+    service.describe_dataset("ds")
+    service.clear_schema_cache()
+    service.describe_dataset("ds")
+
+    assert len(client.queries) == 2

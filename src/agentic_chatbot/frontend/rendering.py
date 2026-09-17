@@ -9,6 +9,8 @@ table, but the same `chart` spec drives a Plotly figure in both).
 
 from __future__ import annotations
 
+import csv
+import io
 from typing import Any
 
 import plotly.graph_objects as go
@@ -23,6 +25,8 @@ def build_plotly_figure(chart: dict[str, Any]) -> go.Figure:
     fig = go.Figure()
     if chart_type == "line":
         fig.add_trace(go.Scatter(x=x, y=y, mode="lines+markers"))
+    elif chart_type == "scatter":
+        fig.add_trace(go.Scatter(x=x, y=y, mode="markers"))
     else:
         fig.add_trace(go.Bar(x=x, y=y))
 
@@ -53,3 +57,17 @@ def rows_to_markdown_table(rows: list[dict[str, Any]], max_rows: int = 25) -> st
     if len(rows) > max_rows:
         table += f"\n\n_Showing {max_rows} of {len(rows)} rows._"
     return table
+
+
+def rows_to_csv_bytes(rows: list[dict[str, Any]]) -> bytes:
+    """Serialize query result rows to CSV, headers included, full row set
+    (not truncated like the markdown preview — a CSV export should be
+    complete)."""
+    if not rows:
+        return b""
+
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=list(rows[0].keys()))
+    writer.writeheader()
+    writer.writerows(rows)
+    return buffer.getvalue().encode("utf-8")
