@@ -28,13 +28,19 @@ class _FakeChatAgent:
 
 
 class _FakeBigQueryAgent:
-    def __init__(self, result: BigQueryAgentResult) -> None:
+    def __init__(self, result: BigQueryAgentResult, schema_explanation: str = "unused") -> None:
         self.result = result
+        self.schema_explanation = schema_explanation
         self.questions: list[str] = []
+        self.describe_schema_calls = 0
 
     def answer(self, question: str) -> BigQueryAgentResult:
         self.questions.append(question)
         return self.result
+
+    def describe_schema(self) -> str:
+        self.describe_schema_calls += 1
+        return self.schema_explanation
 
 
 def _make_orchestrator(
@@ -191,6 +197,25 @@ def test_orchestrator_explains_when_followup_data_still_not_chartable() -> None:
     assert "doesn't have enough structure" in result.reply
     assert result.chart is None
     assert session.pending_chart_offer is False
+
+
+def test_orchestrator_routes_to_schema_explanation_on_schema_classification() -> None:
+    orchestrator, chat_agent, bigquery_agent = _make_orchestrator(
+        classification="SCHEMA",
+        bigquery_result=BigQueryAgentResult("unused", None, None),
+        dataset="my_dataset",
+    )
+    bigquery_agent.schema_explanation = "This dataset has a `drivers` table with driver_id, name."
+
+    result = orchestrator.handle(Session(session_id="s1"), "explain the dataset")
+
+    assert result.reply == "This dataset has a `drivers` table with driver_id, name."
+    assert result.generated_query is None
+    assert result.table is None
+    assert bigquery_agent.describe_schema_calls == 1
+    # A schema question never touches SQL generation or the chat model.
+    assert bigquery_agent.questions == []
+    assert chat_agent.calls == []
 
 
 def test_orchestrator_treats_non_affirmative_followup_as_a_new_message() -> None:

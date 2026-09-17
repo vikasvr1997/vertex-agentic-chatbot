@@ -24,12 +24,15 @@ limiting, evaluation harness, etc.).
   that both call the same authenticated FastAPI service
   (`src/agentic_chatbot/api/`), so agent logic, sessions, and Vertex AI
   connectivity live in exactly one place.
-- **Orchestrator routes chat vs. data queries.** Every message goes through
-  `Orchestrator`, which classifies it (a stateless Gemini call) and routes
-  to either the general `ChatAgent` or the read-only `BigQueryAgent`. If no
-  `BIGQUERY_DEFAULT_DATASET` is configured, classification is skipped and
-  everything goes to chat — no BigQuery access is attempted unless you opt
-  in. See `src/agentic_chatbot/agents/orchestrator.py`.
+- **Orchestrator routes chat, schema questions, and data queries
+  separately.** Every message goes through `Orchestrator`, which classifies
+  it (a stateless Gemini call) into SQL (generate + run a query), SCHEMA
+  (a meta-question like "what data do you have?" — answered directly from
+  the live schema, never as a query and never by the schema-blind chat
+  model), or CHAT (the general `ChatAgent`). If no `BIGQUERY_DEFAULT_DATASET`
+  is configured, classification is skipped and everything goes to chat — no
+  BigQuery access is attempted unless you opt in. See
+  `src/agentic_chatbot/agents/orchestrator.py`.
 - **BigQuery access is read-only, twice over.** The BigQuery agent generates
   SQL grounded in the dataset's live schema, but `BigQueryService` refuses
   to execute anything that isn't a bare `SELECT`/`WITH` statement — even if

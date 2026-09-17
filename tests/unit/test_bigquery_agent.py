@@ -140,3 +140,39 @@ def test_bigquery_agent_returns_canned_message_for_empty_results() -> None:
     assert result.table == []
     # No summarization call for empty results — nothing to summarize.
     assert len(vertex_client.prompts) == 1
+
+
+def test_describe_schema_returns_model_explanation_grounded_in_live_schema() -> None:
+    vertex_client = _FakeVertexClient(["This dataset has one table `t` with an id column."])
+    bigquery_service = _FakeBigQueryService()
+    agent = BigQueryAgent(vertex_client, bigquery_service, get_settings())
+
+    reply = agent.describe_schema()
+
+    assert reply == "This dataset has one table `t` with an id column."
+    # Grounded in the actual schema text, not asked to generate SQL.
+    assert "Table `my_dataset.t`: id (INT64)" in vertex_client.prompts[0]
+    assert "SQL" not in vertex_client.prompts[0]
+
+
+def test_describe_schema_falls_back_to_raw_schema_if_explanation_fails() -> None:
+    class _RaisingVertexClient:
+        def generate_once(self, prompt: str) -> str:
+            raise RuntimeError("model unavailable")
+
+    bigquery_service = _FakeBigQueryService()
+    agent = BigQueryAgent(_RaisingVertexClient(), bigquery_service, get_settings())
+
+    reply = agent.describe_schema()
+
+    assert reply == "Table `my_dataset.t`: id (INT64)"
+
+
+def test_describe_schema_never_executes_a_query() -> None:
+    vertex_client = _FakeVertexClient(["some explanation"])
+    bigquery_service = _FakeBigQueryService()
+    agent = BigQueryAgent(vertex_client, bigquery_service, get_settings())
+
+    agent.describe_schema()
+
+    assert bigquery_service.queries == []

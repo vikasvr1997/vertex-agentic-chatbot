@@ -46,6 +46,17 @@ Answer:"""
 
 _SUMMARY_MAX_ROWS = 20
 
+_SCHEMA_EXPLANATION_PROMPT = """You have read-only query access to one BigQuery dataset.
+Explain to the user, in clear and friendly language, what data is available to them:
+list the tables and briefly describe what each one likely represents based on its
+columns. Do not invent tables, columns, or data that aren't in the schema below —
+describe only what's actually there.
+
+Schema:
+{schema}
+
+Answer:"""
+
 
 @dataclass
 class BigQueryAgentResult:
@@ -106,6 +117,19 @@ class BigQueryAgent:
 
         reply = self._summarize(question, sql, rows)
         return BigQueryAgentResult(reply=reply, generated_query=sql, table=rows)
+
+    def describe_schema(self) -> str:
+        """Answer a meta-question about the dataset itself (e.g. "what data
+        do you have?") directly from the live schema — no SQL generation,
+        no execution. Falls back to the raw schema text if the explanation
+        call itself fails, so this never leaves the user with nothing."""
+        schema = self._bigquery_service.describe_dataset(self._settings.bigquery_default_dataset)
+        prompt = _SCHEMA_EXPLANATION_PROMPT.format(schema=schema)
+        try:
+            return self._vertex_client.generate_once(prompt).strip()
+        except Exception as exc:  # noqa: BLE001 — fall back to the raw schema rather than failing
+            logger.warning("bigquery_schema_explanation_failed", error=str(exc))
+            return schema
 
     def _summarize(self, question: str, sql: str, rows: list[dict[str, object]]) -> str:
         preview = rows[:_SUMMARY_MAX_ROWS]

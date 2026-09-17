@@ -1,10 +1,20 @@
-"""Routes each user message to the chat agent or the BigQuery agent.
+"""Routes each user message to the chat agent, the BigQuery agent, or a
+direct schema explanation.
 
 Classification is a stateless, single-turn Gemini call (never mixed into
 the user's conversation history) rather than keyword matching, so it
-generalizes past a fixed phrase list. If no BigQuery dataset is configured,
-classification is skipped entirely and every message goes to chat — this
-keeps the app usable out of the box with Vertex AI alone.
+generalizes past a fixed phrase list. It distinguishes three intents:
+
+* SQL — answerable by generating and running a query (``BigQueryAgent.answer``).
+* SCHEMA — a meta-question about the dataset itself ("what data do you
+  have?", "explain the dataset") — answered directly from the live schema
+  (``BigQueryAgent.describe_schema``), never as a SELECT statement and
+  never by the schema-blind general chat model.
+* CHAT — everything else, handled by ``ChatAgent``.
+
+If no BigQuery dataset is configured, classification is skipped entirely
+and every message goes to chat — this keeps the app usable out of the box
+with Vertex AI alone.
 
 When a BigQuery query returns rows but nothing chartable was found (see
 ``services.chart_utils.infer_chart``), the reply is appended with a
@@ -29,11 +39,14 @@ from agentic_chatbot.services.chart_utils import infer_chart
 
 logger = get_logger(__name__)
 
-_CLASSIFY_PROMPT = """Classify the user's message as exactly one word: SQL or CHAT.
+_CLASSIFY_PROMPT = """Classify the user's message as exactly one word: SQL, SCHEMA, or CHAT.
 
 SQL: the message asks a question that requires querying structured data — \
 counts, aggregates, "show me", "how many", "top N", "list", "average", \
 filtering or grouping records.
+SCHEMA: the message asks about the dataset itself, not a query result — \
+"what tables/data do you have", "explain the dataset", "describe the data", \
+"what's in the database".
 CHAT: anything else — greetings, general questions, requests unrelated to \
 querying data.
 
@@ -102,7 +115,10 @@ class Orchestrator:
             )
             return OrchestratorResult(reply=reply)
 
-        if self._classify(message) == "SQL":
+        classification = self._classify(message)
+        if classification == "SCHEMA":
+            return OrchestratorResult(reply=self._bigquery_agent.describe_schema())
+        if classification == "SQL":
             return self._handle_sql(session, message)
 
         reply = self._chat_agent.reply(session.session_id, message, model_override=model_override)
@@ -156,4 +172,9 @@ class Orchestrator:
         except Exception as exc:  # noqa: BLE001 — fall back to chat on any classification error
             logger.warning("intent_classification_failed", error=str(exc))
             return "CHAT"
-        return "SQL" if "SQL" in raw.upper() else "CHAT"
+        normalized = raw.upper()
+        if "SCHEMA" in normalized:
+            return "SCHEMA"
+        if "SQL" in normalized:
+            return "SQL"
+        return "CHAT"
