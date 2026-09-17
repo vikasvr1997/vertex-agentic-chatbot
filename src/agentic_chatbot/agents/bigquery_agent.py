@@ -31,6 +31,21 @@ Schema:
 Question: {question}
 SQL:"""
 
+_SUMMARY_PROMPT = """You just ran a read-only BigQuery query to answer the user's question.
+Write a concise, natural-language answer/summary of the results below — explain
+what the numbers mean in context of the question, don't just restate the raw
+table. The full result table is shown separately in the UI, so don't repeat
+every row verbatim; call out the notable values.
+
+Question: {question}
+SQL used: {sql}
+Result rows ({shown} of {total} shown):
+{rows_text}
+
+Answer:"""
+
+_SUMMARY_MAX_ROWS = 20
+
 
 @dataclass
 class BigQueryAgentResult:
@@ -84,5 +99,26 @@ class BigQueryAgent:
                 table=None,
             )
 
-        reply = f"Found {len(rows)} row(s)." if rows else "The query returned no rows."
+        if not rows:
+            return BigQueryAgentResult(
+                reply="The query returned no rows.", generated_query=sql, table=rows
+            )
+
+        reply = self._summarize(question, sql, rows)
         return BigQueryAgentResult(reply=reply, generated_query=sql, table=rows)
+
+    def _summarize(self, question: str, sql: str, rows: list[dict[str, object]]) -> str:
+        preview = rows[:_SUMMARY_MAX_ROWS]
+        rows_text = "\n".join(str(row) for row in preview)
+        prompt = _SUMMARY_PROMPT.format(
+            question=question,
+            sql=sql,
+            shown=len(preview),
+            total=len(rows),
+            rows_text=rows_text,
+        )
+        try:
+            return self._vertex_client.generate_once(prompt).strip()
+        except Exception as exc:  # noqa: BLE001 — fall back to a plain count rather than failing the turn
+            logger.warning("bigquery_summary_failed", error=str(exc))
+            return f"Found {len(rows)} row(s)."

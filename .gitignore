@@ -36,6 +36,8 @@ htmlcov/
 
 # Streamlit local state
 .streamlit/secrets.toml
+# Symlink `streamlit run` creates into .venv/.../streamlit/.agents/skills/
+/.agents/skills/developing-with-streamlit
 
 # IDE
 .idea/
