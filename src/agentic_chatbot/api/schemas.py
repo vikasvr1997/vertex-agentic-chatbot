@@ -12,7 +12,7 @@ class ChatRequest(BaseModel):
     session_id: str | None = Field(default=None, description="Omit to start a new session.")
     settings: dict[str, Any] | None = Field(
         default=None,
-        description="Optional per-request overrides, e.g. {'model': 'gemini-2.0-flash-001'}. "
+        description="Optional per-request overrides, e.g. {'model': 'gemini-2.5-flash'}. "
         "A model override only takes effect when starting a brand-new session.",
     )
 

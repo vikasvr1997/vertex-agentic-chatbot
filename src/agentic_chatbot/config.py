@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     google_cloud_project: str = Field(alias="GOOGLE_CLOUD_PROJECT")
     google_cloud_location: str = Field(default="us-central1", alias="GOOGLE_CLOUD_LOCATION")
     vertex_agent_engine_id: str = Field(default="", alias="VERTEX_AGENT_ENGINE_ID")
-    vertex_model_name: str = Field(default="gemini-2.0-flash-001", alias="VERTEX_MODEL_NAME")
+    vertex_model_name: str = Field(default="gemini-2.5-flash", alias="VERTEX_MODEL_NAME")
 
     # BigQuery data-query agent (read-only). Leave the dataset empty to skip
     # SQL routing entirely — the orchestrator falls straight back to chat.

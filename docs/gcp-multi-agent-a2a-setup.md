@@ -94,6 +94,7 @@ from google.adk.tools import FunctionTool
 
 from agentic_chatbot.services.bigquery_service import BigQueryService, ReadOnlyQueryError
 
+
 def run_readonly_query(sql: str) -> dict:
     """Execute a read-only BigQuery SQL query and return the resulting rows.
 
@@ -104,6 +105,7 @@ def run_readonly_query(sql: str) -> dict:
         return {"rows": service.run_query(sql)}
     except ReadOnlyQueryError as exc:
         return {"error": str(exc)}
+
 
 root_agent = Agent(
     name="bigquery_data_agent",
@@ -124,17 +126,20 @@ from google.adk.agents import Agent
 from google.adk.tools import FunctionTool
 from google.cloud import storage
 
+
 def list_objects(bucket: str, prefix: str = "") -> dict:
     """List object names/sizes/updated-times under a prefix in a GCS bucket. Read-only."""
     client = storage.Client()  # ADC
     blobs = client.list_blobs(bucket, prefix=prefix, max_results=200)
     return {"objects": [{"name": b.name, "size": b.size, "updated": str(b.updated)} for b in blobs]}
 
+
 def read_object_text(bucket: str, name: str, max_bytes: int = 200_000) -> dict:
     """Read up to max_bytes of a text object's content. Read-only; no writes/deletes exposed."""
     client = storage.Client()
     blob = client.bucket(bucket).blob(name)
     return {"content": blob.download_as_text()[:max_bytes]}
+
 
 root_agent = Agent(
     name="gcs_data_agent",
@@ -160,7 +165,9 @@ adk web   # local dev UI to chat with an agent and inspect tool calls
 import vertexai
 from vertexai import agent_engines
 
-vertexai.init(project="<project-id>", location="us-central1", staging_bucket="gs://<staging-bucket>")
+vertexai.init(
+    project="<project-id>", location="us-central1", staging_bucket="gs://<staging-bucket>"
+)
 
 remote_bigquery_agent = agent_engines.create(
     bigquery_agent.root_agent,

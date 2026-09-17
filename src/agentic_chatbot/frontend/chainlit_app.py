@@ -19,9 +19,9 @@ from agentic_chatbot.frontend.rendering import build_plotly_figure, rows_to_mark
 
 _CURATED_MODELS = [
     "(use backend default)",
-    "gemini-2.0-flash-001",
     "gemini-2.5-flash",
     "gemini-2.5-pro",
+    "gemini-2.5-flash-lite",
 ]
 
 
