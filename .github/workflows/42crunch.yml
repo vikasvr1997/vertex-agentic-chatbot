@@ -37,7 +37,7 @@ jobs:
       # Requires a 42Crunch platform account and API token stored as the
       # CRUNCH42_API_TOKEN repo secret: https://docs.42crunch.com/
       - name: 42Crunch API Security Audit
-        uses: 42Crunch/api-security-audit-action@v3
+        uses: 42Crunch/api-security-audit-action@v4
         with:
           api-token: ${{ secrets.CRUNCH42_API_TOKEN }}
           data-file: openapi/openapi.yaml
