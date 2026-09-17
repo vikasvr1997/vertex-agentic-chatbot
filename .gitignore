@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Env files and secrets — never commit real credentials
+.env
+.env.*
+!.env.example
+*serviceaccount*.json
+*service-account*.json
+*-key.json
+*credentials*.json
+!openapi/*.json
+*.pem
+
+# Test / coverage / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Chainlit local state
+.chainlit/
+.files/
+
+# Streamlit local state
+.streamlit/secrets.toml
+
+# IDE
+.idea/
+.vscode/
+.DS_Store

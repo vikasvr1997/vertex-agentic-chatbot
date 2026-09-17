@@ -1,0 +1,48 @@
+services:
+  api:
+    build: .
+    command: ["uvicorn", "agentic_chatbot.api.server:app", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    env_file: .env
+    volumes:
+      # Local dev only: reuse the host's `gcloud auth application-default login`
+      # credentials inside the container. Not needed on Cloud Run/GKE, where
+      # ADC resolves from the attached service account instead.
+      - ~/.config/gcloud:/home/appuser/.config/gcloud:ro
+
+  streamlit:
+    build: .
+    command:
+      [
+        "streamlit",
+        "run",
+        "src/agentic_chatbot/frontend/streamlit_app.py",
+        "--server.port=8501",
+        "--server.address=0.0.0.0",
+      ]
+    ports:
+      - "8501:8501"
+    env_file: .env
+    environment:
+      - BACKEND_URL=http://api:8080
+    depends_on:
+      - api
+
+  chainlit:
+    build: .
+    command:
+      [
+        "chainlit",
+        "run",
+        "src/agentic_chatbot/frontend/chainlit_app.py",
+        "--port=8000",
+        "--host=0.0.0.0",
+      ]
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      - BACKEND_URL=http://api:8080
+    depends_on:
+      - api
