@@ -31,7 +31,7 @@ jobs:
       # Requires repo secrets SONAR_TOKEN and (for self-hosted SonarQube) SONAR_HOST_URL.
       # For SonarCloud, set SONAR_HOST_URL=https://sonarcloud.io.
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v4
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
