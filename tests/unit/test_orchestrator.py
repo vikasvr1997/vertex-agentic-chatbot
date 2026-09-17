@@ -1,0 +1,117 @@
+from __future__ import annotations
+
+import pytest
+
+from agentic_chatbot.agents.bigquery_agent import BigQueryAgentResult
+from agentic_chatbot.agents.orchestrator import Orchestrator
+from agentic_chatbot.config import get_settings
+
+
+class _FakeVertexClient:
+    def __init__(self, classification: str) -> None:
+        self.classification = classification
+        self.prompts: list[str] = []
+
+    def generate_once(self, prompt: str) -> str:
+        self.prompts.append(prompt)
+        return self.classification
+
+
+class _FakeChatAgent:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, str | None]] = []
+
+    def reply(self, session_id: str, message: str, model_override: str | None = None) -> str:
+        self.calls.append((session_id, message, model_override))
+        return f"chat-reply: {message}"
+
+
+class _FakeBigQueryAgent:
+    def __init__(self, result: BigQueryAgentResult) -> None:
+        self.result = result
+        self.questions: list[str] = []
+
+    def answer(self, question: str) -> BigQueryAgentResult:
+        self.questions.append(question)
+        return self.result
+
+
+def _make_orchestrator(
+    classification: str, bigquery_result: BigQueryAgentResult, dataset: str
+) -> tuple[Orchestrator, _FakeChatAgent, _FakeBigQueryAgent]:
+    settings = get_settings()
+    settings.bigquery_default_dataset = dataset
+    vertex_client = _FakeVertexClient(classification)
+    chat_agent = _FakeChatAgent()
+    bigquery_agent = _FakeBigQueryAgent(bigquery_result)
+    orchestrator = Orchestrator(vertex_client, chat_agent, bigquery_agent, settings)
+    return orchestrator, chat_agent, bigquery_agent
+
+
+def test_orchestrator_skips_classification_when_no_dataset_configured() -> None:
+    orchestrator, chat_agent, bigquery_agent = _make_orchestrator(
+        classification="SQL", bigquery_result=BigQueryAgentResult("x", None, None), dataset=""
+    )
+
+    result = orchestrator.handle("s1", "how many rows?")
+
+    assert result.reply == "chat-reply: how many rows?"
+    assert chat_agent.calls == [("s1", "how many rows?", None)]
+    assert bigquery_agent.questions == []
+
+
+def test_orchestrator_routes_to_bigquery_agent_on_sql_classification() -> None:
+    bq_result = BigQueryAgentResult(
+        reply="Found 2 row(s).",
+        generated_query="SELECT category, count FROM t",
+        table=[{"category": "a", "count": 3}, {"category": "b", "count": 5}],
+    )
+    orchestrator, chat_agent, bigquery_agent = _make_orchestrator(
+        classification="SQL", bigquery_result=bq_result, dataset="my_dataset"
+    )
+
+    result = orchestrator.handle("s1", "how many rows per category?")
+
+    assert result.reply == "Found 2 row(s)."
+    assert result.generated_query == "SELECT category, count FROM t"
+    assert result.table == bq_result.table
+    assert result.chart is not None and result.chart["type"] == "bar"
+    assert bigquery_agent.questions == ["how many rows per category?"]
+    assert chat_agent.calls == []
+
+
+def test_orchestrator_routes_to_chat_agent_on_chat_classification() -> None:
+    orchestrator, chat_agent, bigquery_agent = _make_orchestrator(
+        classification="CHAT",
+        bigquery_result=BigQueryAgentResult("x", None, None),
+        dataset="my_dataset",
+    )
+
+    result = orchestrator.handle("s1", "hello there", model_override="gemini-2.5-pro")
+
+    assert result.reply == "chat-reply: hello there"
+    assert chat_agent.calls == [("s1", "hello there", "gemini-2.5-pro")]
+    assert bigquery_agent.questions == []
+
+
+def test_orchestrator_falls_back_to_chat_when_classification_raises() -> None:
+    class _RaisingVertexClient:
+        def generate_once(self, prompt: str) -> str:
+            raise RuntimeError("boom")
+
+    settings = get_settings()
+    settings.bigquery_default_dataset = "my_dataset"
+    chat_agent = _FakeChatAgent()
+    bigquery_agent = _FakeBigQueryAgent(BigQueryAgentResult("x", None, None))
+    orchestrator = Orchestrator(_RaisingVertexClient(), chat_agent, bigquery_agent, settings)
+
+    result = orchestrator.handle("s1", "hello")
+
+    assert result.reply == "chat-reply: hello"
+    assert bigquery_agent.questions == []
+
+
+@pytest.fixture(autouse=True)
+def _reset_settings_cache() -> None:
+    yield
+    get_settings.cache_clear()

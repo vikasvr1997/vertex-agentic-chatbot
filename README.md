@@ -20,6 +20,18 @@ backend.
   that both call the same authenticated FastAPI service
   (`src/agentic_chatbot/api/`), so agent logic, sessions, and Vertex AI
   connectivity live in exactly one place.
+- **Orchestrator routes chat vs. data queries.** Every message goes through
+  `Orchestrator`, which classifies it (a stateless Gemini call) and routes
+  to either the general `ChatAgent` or the read-only `BigQueryAgent`. If no
+  `BIGQUERY_DEFAULT_DATASET` is configured, classification is skipped and
+  everything goes to chat — no BigQuery access is attempted unless you opt
+  in. See `src/agentic_chatbot/agents/orchestrator.py`.
+- **BigQuery access is read-only, twice over.** The BigQuery agent generates
+  SQL grounded in the dataset's live schema, but `BigQueryService` refuses
+  to execute anything that isn't a bare `SELECT`/`WITH` statement — even if
+  the model or a caller supplied something else — on top of the ADC
+  identity itself being granted only `roles/bigquery.dataViewer` +
+  `roles/bigquery.jobUser`. See `src/agentic_chatbot/services/bigquery_service.py`.
 
 ## Project layout
 
@@ -31,16 +43,35 @@ src/agentic_chatbot/
     auth.py            ADC verification
     vertex_client.py   Vertex AI backends (Gemini model / Agent Engine)
     conversation.py    In-memory session tracking
+  agents/
+    orchestrator.py    Routes each message to chat or BigQuery
+    chat_agent.py       General conversation (via vertex_client)
+    bigquery_agent.py    NL -> SQL -> rows, schema-grounded
+  services/
+    bigquery_service.py  Read-only BigQuery client + guardrail
+    chart_utils.py        Heuristic chart-spec inference from rows
   tools/               Agent-callable tools (function-calling)
   api/                 FastAPI backend (bearer-token authenticated)
+    routes/chat.py       POST /chat -> orchestrator
+    routes/status.py     GET /status -> non-secret config for the UI sidebar
   frontend/
     streamlit_app.py
     chainlit_app.py
+    rendering.py         Shared Plotly/markdown-table helpers
 tests/                 pytest unit + integration tests
 openapi/openapi.yaml   Generated OpenAPI spec, audited by 42Crunch in CI
 .github/workflows/     CI, SonarQube, 42Crunch, CodeQL
 .agents/skills/        Runbooks for coding agents (deploy, add tools, security scans)
 ```
+
+### Chat response shape
+
+`POST /chat` returns `{session_id, reply, turn_count, generated_query, table, chart}`.
+`generated_query`/`table`/`chart` are `null` for a plain chat turn, and
+populated when the orchestrator routed to the BigQuery agent. Both
+frontends render `generated_query` as a collapsible SQL block, `table` as
+a data table, and `chart` (`{type, x, y, title, x_label, y_label}`) as a
+Plotly figure.
 
 ## Local setup
 
@@ -68,6 +99,25 @@ Or via Docker Compose (mounts your host's ADC credentials read-only):
 ```bash
 make docker-up
 ```
+
+## Enabling the BigQuery data-query agent (optional)
+
+Leave `BIGQUERY_DEFAULT_DATASET` empty to run chat-only. To enable NL -> SQL
+querying against a dataset:
+
+```bash
+# Grant the ADC identity read-only access — never a write role.
+gcloud projects add-iam-policy-binding <project-id> \
+  --member="user:you@example.com" \
+  --role="roles/bigquery.dataViewer"
+gcloud projects add-iam-policy-binding <project-id> \
+  --member="user:you@example.com" \
+  --role="roles/bigquery.jobUser"
+```
+
+Then set `BIGQUERY_DEFAULT_DATASET=your_dataset` in `.env` and restart the
+API. The orchestrator will start classifying messages and routing
+data-shaped questions to the BigQuery agent.
 
 ## Testing
 

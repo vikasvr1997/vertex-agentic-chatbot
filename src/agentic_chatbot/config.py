@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     vertex_agent_engine_id: str = Field(default="", alias="VERTEX_AGENT_ENGINE_ID")
     vertex_model_name: str = Field(default="gemini-2.0-flash-001", alias="VERTEX_MODEL_NAME")
 
+    # BigQuery data-query agent (read-only). Leave the dataset empty to skip
+    # SQL routing entirely — the orchestrator falls straight back to chat.
+    bigquery_default_dataset: str = Field(default="", alias="BIGQUERY_DEFAULT_DATASET")
+    bigquery_max_rows: int = Field(default=200, alias="BIGQUERY_MAX_ROWS")
+    bigquery_query_timeout_seconds: float = Field(
+        default=30.0, alias="BIGQUERY_QUERY_TIMEOUT_SECONDS"
+    )
+    bigquery_max_bytes_billed: int = Field(default=200_000_000, alias="BIGQUERY_MAX_BYTES_BILLED")
+
     # Internal API
     internal_api_token: str = Field(default="change-me-local-dev-only", alias="INTERNAL_API_TOKEN")
     backend_url: str = Field(default="http://localhost:8080", alias="BACKEND_URL")

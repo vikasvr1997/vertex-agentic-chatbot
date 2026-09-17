@@ -13,6 +13,7 @@ authors = [{ name = "Vikas Reddy Bodireddy" }]
 
 dependencies = [
   "google-cloud-aiplatform>=1.70.0",
+  "google-cloud-bigquery>=3.25.0",
   "google-auth>=2.34.0",
   "vertexai>=1.70.0",
   "fastapi>=0.115.0",
@@ -25,6 +26,7 @@ dependencies = [
   "python-dotenv>=1.0.1",
   "structlog>=24.4.0",
   "tenacity>=9.0.0",
+  "plotly>=5.24.0",
 ]
 
 [project.optional-dependencies]
