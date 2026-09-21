@@ -1,0 +1,126 @@
+name: CD
+
+# Scaffold only — every REPLACE_WITH_* placeholder below must be filled in
+# before this workflow can run. Deploys the 3 services already defined in
+# docker-compose.yml (api, streamlit, chainlit) to Cloud Run, built from the
+# repo's existing Dockerfile, so no new container config is introduced here.
+#
+# One-time GCP setup needed before this can run (not done by this workflow):
+#   1. Artifact Registry repo:
+#      gcloud artifacts repositories create $AR_REPO --repository-format=docker --location=$REGION
+#   2. A deploy-time service account (used by this workflow to build/push/deploy):
+#      gcloud iam service-accounts create <deployer-sa-name>
+#      Grant it: roles/run.admin, roles/artifactregistry.writer,
+#      roles/iam.serviceAccountUser (to act as the runtime SA below).
+#   3. A separate runtime service account (attached to the Cloud Run services,
+#      least-privilege — bigquery.dataViewer/jobUser only if BigQuery is used):
+#      gcloud iam service-accounts create <runtime-sa-name>
+#   4. Keyless auth via Workload Identity Federation (recommended over a
+#      downloaded JSON key) — see https://github.com/google-github-actions/auth#setup
+#      for the pool/provider setup, then bind it to the deployer SA:
+#      gcloud iam service-accounts add-iam-policy-binding <deployer-sa> \
+#        --role=roles/iam.workloadIdentityUser \
+#        --member="principalSet://iam.googleapis.com/<pool>/attribute.repository/<owner>/<repo>"
+#   5. Secrets referenced by the deploy steps below (e.g. internal-api-token)
+#      created in Secret Manager, with the runtime SA granted
+#      roles/secretmanager.secretAccessor on each.
+#
+# If you'd rather authenticate with a downloaded service-account JSON key
+# instead of Workload Identity Federation, replace the "Authenticate to
+# Google Cloud" step's `workload_identity_provider`/`service_account` inputs
+# with `credentials_json: ${{ secrets.GCP_SA_KEY }}` and drop `id-token: write`.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write # required for Workload Identity Federation
+
+env:
+  PROJECT_ID: "REPLACE_WITH_GCP_PROJECT_ID"
+  REGION: "us-central1" # TODO: change if you deploy elsewhere
+  AR_REPO: "REPLACE_WITH_ARTIFACT_REGISTRY_REPO_NAME"
+  DEPLOYER_SA: "REPLACE_WITH_DEPLOYER_SA@REPLACE_WITH_GCP_PROJECT_ID.iam.gserviceaccount.com"
+  RUNTIME_SA: "REPLACE_WITH_RUNTIME_SA@REPLACE_WITH_GCP_PROJECT_ID.iam.gserviceaccount.com"
+  WIF_PROVIDER: "REPLACE_WITH_WORKLOAD_IDENTITY_PROVIDER_RESOURCE_NAME"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build image
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/agentic-chatbot:${{ github.sha }}"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          docker build -t "$IMAGE" .
+
+      - name: Push image
+        run: docker push "$IMAGE"
+
+      # Backend API — private by default (--no-allow-unauthenticated); the
+      # frontends call it over its Cloud Run URL using INTERNAL_API_TOKEN,
+      # same bearer-token check as core.deps.require_internal_token locally.
+      - name: Deploy backend API
+        run: |
+          gcloud run deploy agentic-chatbot-api \
+            --image="$IMAGE" \
+            --region="$REGION" \
+            --project="$PROJECT_ID" \
+            --command=uvicorn \
+            --args="agentic_chatbot.api.server:app,--host,0.0.0.0,--port,8080" \
+            --port=8080 \
+            --no-allow-unauthenticated \
+            --service-account="$RUNTIME_SA" \
+            --set-secrets="INTERNAL_API_TOKEN=internal-api-token:latest" \
+            --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION}"
+          # TODO: add --set-env-vars/--set-secrets for BIGQUERY_DEFAULT_DATASET,
+          # VERTEX_AGENT_ENGINE_ID, LLM_BACKEND, CLAUDE_API_KEY_SECRET, etc.
+          # as your deployment needs them (see .env.example for the full list).
+
+      - name: Resolve deployed API URL
+        run: |
+          echo "API_URL=$(gcloud run services describe agentic-chatbot-api \
+            --region="$REGION" --project="$PROJECT_ID" \
+            --format='value(status.url)')" >> "$GITHUB_ENV"
+
+      - name: Deploy Streamlit frontend
+        run: |
+          gcloud run deploy agentic-chatbot-streamlit \
+            --image="$IMAGE" \
+            --region="$REGION" \
+            --project="$PROJECT_ID" \
+            --command=streamlit \
+            --args="run,src/agentic_chatbot/frontend/streamlit_app.py,--server.port=8501,--server.address=0.0.0.0" \
+            --port=8501 \
+            --allow-unauthenticated \
+            --service-account="$RUNTIME_SA" \
+            --set-env-vars="BACKEND_URL=${API_URL}"
+
+      - name: Deploy Chainlit frontend
+        run: |
+          gcloud run deploy agentic-chatbot-chainlit \
+            --image="$IMAGE" \
+            --region="$REGION" \
+            --project="$PROJECT_ID" \
+            --command=chainlit \
+            --args="run,src/agentic_chatbot/frontend/chainlit_app.py,--port=8000,--host=0.0.0.0" \
+            --port=8000 \
+            --allow-unauthenticated \
+            --service-account="$RUNTIME_SA" \
+            --set-env-vars="BACKEND_URL=${API_URL}"

@@ -20,6 +20,14 @@ limiting, evaluation harness, etc.).
   (`GeminiModelBackend`). Once you set `VERTEX_AGENT_ENGINE_ID`, it switches
   to querying your deployed Agent Engine (`ReasoningEngineBackend`) with no
   code changes — see `.agents/skills/deploy-to-vertex-agent-engine/SKILL.md`.
+- **Optional third backend: Claude.** Set `LLM_BACKEND=claude` to route the
+  main conversational backend through Anthropic's API instead
+  (`ClaudeModelBackend` in `core/vertex_client.py`), selected the same way as
+  the two Vertex backends above. Internal/auxiliary calls (SQL generation,
+  message classification) always stay on Gemini regardless of this setting.
+  The API key is never read from `.env` — only its Secret Manager secret
+  name is (`CLAUDE_API_KEY_SECRET`), fetched via `core/auth.py::get_secret()`.
+  Requires the `claude` extra: `pip install -e ".[claude]"`.
 - **One backend, two frontends.** Streamlit and Chainlit are thin clients
   that both call the same authenticated FastAPI service
   (`src/agentic_chatbot/api/`), so agent logic, sessions, and Vertex AI
@@ -169,6 +177,13 @@ at the `vertexai` boundary (see `tests/unit/test_vertex_client.py`).
   issues. Requires a 42Crunch account and the `CRUNCH42_API_TOKEN` repo
   secret. Regenerate the spec after API changes: `make openapi`.
 - **`codeql.yml`** — GitHub's static security analysis, no extra setup.
+- **`cd.yml`** — deploys the API/Streamlit/Chainlit services (the same three
+  from `docker-compose.yml`) to Cloud Run on push to `main`. It's a scaffold:
+  every `REPLACE_WITH_*` placeholder (project ID, region, Artifact Registry
+  repo, deployer/runtime service accounts, Workload Identity Federation
+  provider) must be filled in, and the one-time GCP setup listed in the
+  workflow's header comment (Artifact Registry repo, service accounts, WIF
+  binding, Secret Manager secrets) must be done first.
 
 None of these secrets are included in this repo — add them under
 **Settings → Secrets and variables → Actions** once you provision the

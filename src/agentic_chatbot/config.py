@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     vertex_agent_engine_id: str = Field(default="", alias="VERTEX_AGENT_ENGINE_ID")
     vertex_model_name: str = Field(default="gemini-2.5-flash", alias="VERTEX_MODEL_NAME")
 
+    # Optional alternative conversational backend (see core.vertex_client.
+    # ClaudeModelBackend). Internal/auxiliary calls (SQL generation,
+    # classification) always use Gemini regardless of this setting. The
+    # Claude API key itself is never read from env — only its Secret
+    # Manager secret name is, fetched via core.auth.get_secret().
+    llm_backend: str = Field(default="vertex", alias="LLM_BACKEND")
+    claude_model_name: str = Field(default="claude-sonnet-5", alias="CLAUDE_MODEL_NAME")
+    claude_api_key_secret: str = Field(default="claude-api-key", alias="CLAUDE_API_KEY_SECRET")
+
     # BigQuery data-query agent (read-only). Leave the dataset empty to skip
     # SQL routing entirely — the orchestrator falls straight back to chat.
     bigquery_default_dataset: str = Field(default="", alias="BIGQUERY_DEFAULT_DATASET")
@@ -47,4 +56,4 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()  # type: ignore[call-arg]
+    return Settings()

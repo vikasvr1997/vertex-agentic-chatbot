@@ -17,6 +17,7 @@ import re
 from google.cloud import bigquery
 
 from agentic_chatbot.config import Settings
+from agentic_chatbot.core.auth import ensure_bigquery_access
 from agentic_chatbot.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -71,7 +72,13 @@ class BigQueryService:
 
     def __init__(self, settings: Settings, client: bigquery.Client | None = None) -> None:
         self._settings = settings
-        self._client = client or bigquery.Client(project=settings.google_cloud_project)
+        if client is None:
+            if settings.bigquery_default_dataset:
+                ensure_bigquery_access(
+                    settings.google_cloud_project, settings.bigquery_default_dataset
+                )
+            client = bigquery.Client(project=settings.google_cloud_project)
+        self._client = client
         self._schema_cache: str | None = None
 
     def run_query(self, sql: str) -> list[dict[str, object]]:

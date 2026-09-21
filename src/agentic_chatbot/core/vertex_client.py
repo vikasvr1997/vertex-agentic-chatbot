@@ -83,6 +83,43 @@ class GeminiModelBackend:
         self._sessions.pop(session_id, None)
 
 
+class ClaudeModelBackend:
+    """Direct Claude (Anthropic) chat — opt-in alternative to the Gemini
+    backends, selected via ``Settings.llm_backend == "claude"``.
+
+    The API key is never read from ``.env``; it's fetched from Secret
+    Manager via ``core.auth.get_secret`` using the secret name in
+    ``Settings.claude_api_key_secret``, consistent with this project's
+    stance of keeping API keys out of plain config.
+    """
+
+    def __init__(self, project_id: str, api_key_secret: str, model_name: str) -> None:
+        import anthropic
+
+        from agentic_chatbot.core.auth import get_secret
+
+        api_key = get_secret(project_id, api_key_secret)
+        self._client = anthropic.Anthropic(api_key=api_key)
+        self._model_name = model_name
+        self._sessions: dict[str, list[dict[str, str]]] = {}
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
+    def send_message(self, session_id: str, message: str, model_override: str | None = None) -> str:
+        history = self._sessions.setdefault(session_id, [])
+        history.append({"role": "user", "content": message})
+        response = self._client.messages.create(
+            model=model_override or self._model_name,
+            max_tokens=2048,
+            messages=history,
+        )
+        reply = str(response.content[0].text)
+        history.append({"role": "assistant", "content": reply})
+        return reply
+
+    def reset_session(self, session_id: str) -> None:
+        self._sessions.pop(session_id, None)
+
+
 def _extract_text(response: object) -> str:
     if isinstance(response, dict):
         for key in ("output", "response", "text"):
@@ -106,6 +143,13 @@ class VertexAgentClient:
         self._utility_model: object | None = None
 
     def _build_backend(self) -> AgentBackend:
+        if self._settings.llm_backend == "claude":
+            logger.info("vertex_backend_selected", backend="claude")
+            return ClaudeModelBackend(
+                self._settings.google_cloud_project,
+                self._settings.claude_api_key_secret,
+                self._settings.claude_model_name,
+            )
         if self._settings.uses_agent_engine:
             logger.info("vertex_backend_selected", backend="reasoning_engine")
             return ReasoningEngineBackend(self._settings.vertex_agent_engine_id)
