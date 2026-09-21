@@ -22,6 +22,9 @@ env/
 !openapi/*.json
 *.pem
 
+# Dev flow-visualizer local state (developer debugging tool, not product data)
+dev_data/
+
 # Test / coverage / lint caches
 .pytest_cache/
 .mypy_cache/

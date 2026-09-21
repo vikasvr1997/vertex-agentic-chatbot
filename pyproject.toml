@@ -27,6 +27,12 @@ dependencies = [
   "structlog>=24.4.0",
   "tenacity>=9.0.0",
   "plotly>=5.24.0",
+  "pandas>=2.2.0",
+  # devtools.architecture_flow_tool — dev-only debugging page mounted on the backend.
+  "dash>=2.18.0",
+  "dash-cytoscape>=1.0.2",
+  "a2wsgi>=1.10.6",
+  "requests>=2.32.0",
 ]
 
 [project.optional-dependencies]
@@ -55,6 +61,10 @@ packages = ["src/agentic_chatbot"]
 line-length = 100
 target-version = "py311"
 src = ["src", "tests"]
+# Vendored single-file dev tool — its own module docstring explains why it's
+# self-contained and not meant to be edited; exclude it from lint/format so
+# a pre-commit run never rewrites someone else's reference implementation.
+extend-exclude = ["src/agentic_chatbot/devtools/architecture_flow_tool.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
