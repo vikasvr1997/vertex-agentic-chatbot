@@ -1,0 +1,49 @@
+steps:
+  - id: terraform-init
+    name: hashicorp/terraform:1.7
+    dir: vertex-agentic-chatbot/BigQuery-Graph
+    args: ["init"]
+
+  - id: terraform-apply
+    name: hashicorp/terraform:1.7
+    dir: vertex-agentic-chatbot/BigQuery-Graph
+    args:
+      - apply
+      - -auto-approve
+      - -var=project_id=$PROJECT_ID
+      - -var=alert_email=${_ALERT_EMAIL}
+      - -var=cloudbuild_repo_uri=${_CLOUDBUILD_REPO_URI}
+
+  # Only does anything when terraform apply's schema_changed output is
+  # "true": builds the PDF, uploads it, generates aliases via Vertex AI,
+  # writes the new graph_version_history row, and emails alert_email.
+  - id: post-apply-report
+    name: python:3.11-slim
+    dir: vertex-agentic-chatbot/BigQuery-Graph
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        pip install --quiet -r requirements.txt
+        python3 post_apply_report.py
+    env:
+      - ALERT_EMAIL=${_ALERT_EMAIL}
+      - REPORT_BUCKET=$PROJECT_ID-graph-reports
+      - VERTEX_AI_LOCATION=us-central1
+    secretEnv: ["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD"]
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/smtp_host/versions/latest
+      env: SMTP_HOST
+    - versionName: projects/$PROJECT_ID/secrets/smtp_user/versions/latest
+      env: SMTP_USER
+    - versionName: projects/$PROJECT_ID/secrets/smtp_password/versions/latest
+      env: SMTP_PASSWORD
+
+substitutions:
+  _ALERT_EMAIL: "changeme@example.com"
+  _CLOUDBUILD_REPO_URI: ""
+
+options:
+  logging: CLOUD_LOGGING_ONLY
