@@ -172,29 +172,43 @@ def main():
     # Safely digest input variables piped from Terraform data block
     input_data = json.loads(sys.stdin.read())
     project_id = input_data["project_id"]
+    # The governance dataset (which hosts the master graph) lives in exactly
+    # one location. BigQuery property graphs, like views, can only reference
+    # tables in the SAME location as the job that creates them, so a single
+    # master graph object can never span datasets that live in different
+    # regions -- only datasets sharing the governance dataset's location can
+    # be folded into it. Datasets elsewhere still get their own local_graph,
+    # just not a slot in the master graph.
+    governance_location = input_data["governance_location"]
 
     # Authenticates automatically via your VS Code local gcloud credentials
     client = bigquery.Client(project=project_id)
     datasets = _list_datasets(client, project_id)
 
-    local_queries = []
+    local_ddl_by_location = {}
     global_node_tables = []
     global_edge_tables = []
     all_rows_by_dataset = {}
     relationship_report = []
+    datasets_excluded_from_master = []
 
     for ds in datasets:
         rows = _schema_snapshot(client, project_id, ds)
         if not rows:
             continue
         all_rows_by_dataset[ds] = rows
+        location = client.get_dataset(f"{project_id}.{ds}").location
 
         ddl, node_tables, edge_tables, report_entry = _build_dataset_graph(project_id, ds, rows)
         if ddl:
-            local_queries.append(ddl)
-        global_node_tables.extend(node_tables)
-        global_edge_tables.extend(edge_tables)
+            local_ddl_by_location.setdefault(location, []).append(ddl)
         relationship_report.append(report_entry)
+
+        if location == governance_location:
+            global_node_tables.extend(node_tables)
+            global_edge_tables.extend(edge_tables)
+        else:
+            datasets_excluded_from_master.append({"dataset": ds, "location": location})
 
     master_node_clause = ", ".join(global_node_tables) if global_node_tables else " "
     master_edge_clause = (
@@ -209,14 +223,19 @@ def main():
     previous_hash = _get_previous_hash(client, project_id)
     schema_changed = previous_hash != new_hash
 
+    local_ddl_by_location_joined = {
+        location: "\n".join(ddls) for location, ddls in local_ddl_by_location.items()
+    }
+
     # Ship structured queries cleanly back into the Terraform processing thread
     output = {
-        "local_ddl_queries": "\n".join(local_queries) if local_queries else "SELECT 1;",
+        "local_ddl_by_location_json": json.dumps(local_ddl_by_location_joined),
         "master_ddl_query": master_ddl if global_node_tables else "SELECT 1;",
         "schema_hash": new_hash,
         "schema_changed": "true" if schema_changed else "false",
         "checked_at": datetime.now(UTC).isoformat(),
         "datasets_json": json.dumps(datasets),
+        "datasets_excluded_from_master_json": json.dumps(datasets_excluded_from_master),
         "relationship_report_json": json.dumps(relationship_report),
     }
     print(json.dumps(output))

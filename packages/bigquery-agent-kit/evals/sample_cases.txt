@@ -1,0 +1,13 @@
+# Example eval cases for bigquery_agent_kit.evals — one per line.
+#
+#   question | reference answer
+#
+# The "| reference answer" part is optional: omit it to check only that the
+# agent grounds itself (calls describe_dataset_schema) before answering.
+# Lines starting with # are ignored. Edit the questions and reference
+# answers below to match your own dataset, then run:
+#
+#   python -m bigquery_agent_kit.evals packages/bigquery-agent-kit/evals/sample_cases.txt
+
+What tables are available in this dataset?
+How many rows are in each table?

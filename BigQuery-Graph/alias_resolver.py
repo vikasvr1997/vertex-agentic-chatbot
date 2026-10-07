@@ -66,7 +66,7 @@ def resolve(project_id, user_term, vertex_location="us-central1"):
     if _VERTEX_AVAILABLE:
         try:
             vertexai.init(project=project_id, location=vertex_location)
-            model = GenerativeModel("gemini-1.5-flash")
+            model = GenerativeModel("gemini-2.5-flash")
             catalog = [{"table": r["table_name"], "column": r["column_name"]} for r in rows][:200]
             prompt = (
                 f"A user referred to '{user_term}'. Given this catalog of tables "

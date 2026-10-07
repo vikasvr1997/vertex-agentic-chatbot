@@ -3,6 +3,13 @@ the latest auto-generated graph (from the daily schema-check pipeline) turns
 out to be wrong and last-known-good needs to come back immediately, without
 waiting for the next scheduled run or a manual schema fix.
 
+Note: stored_ddl.local_ddl concatenates every dataset location's DDL into one
+string (see post_apply_report.py). Running it as a single query here relies
+on BigQuery's default location auto-detection, which only works if every
+referenced dataset shares one location. If your project's datasets span
+multiple regions, split local_ddl by blank-line-separated statement and run
+each against its own dataset's location instead.
+
 Usage: python3 rollback.py --project-id my-project --version 3
 """
 

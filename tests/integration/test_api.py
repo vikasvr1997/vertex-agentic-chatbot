@@ -72,6 +72,7 @@ def test_chat_endpoint_succeeds_with_valid_token(client: TestClient) -> None:
     assert body["generated_query"] is None
     assert body["table"] is None
     assert body["chart"] is None
+    assert body["bigquery_execution_time_ms"] is None
 
 
 def test_chat_endpoint_reuses_session_id(client: TestClient) -> None:

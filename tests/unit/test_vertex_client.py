@@ -31,6 +31,11 @@ class _FakeGenerativeModel:
     def start_chat(self) -> _FakeChatSession:
         return _FakeChatSession()
 
+    def generate_content(
+        self, prompt: str, generation_config: dict[str, object] | None = None
+    ) -> SimpleNamespace:
+        return SimpleNamespace(text=f"{self.model_name}: {prompt}")
+
 
 class _FakeReasoningEngine:
     def __init__(self, resource_name: str) -> None:
@@ -90,3 +95,15 @@ def test_gemini_backend_reset_session_clears_state() -> None:
     backend.reset_session("s1")
 
     assert "s1" not in backend._sessions
+
+
+def test_generate_once_uses_and_caches_model_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    import vertexai.generative_models as gm
+
+    monkeypatch.setattr(gm, "GenerativeModel", _FakeGenerativeModel)
+    client = vertex_client.VertexAgentClient(get_settings())
+
+    reply = client.generate_once("generate sql", model_override="gemini-2.5-flash-lite")
+
+    assert reply == "gemini-2.5-flash-lite: generate sql"
+    assert set(client._utility_models) == {"gemini-2.5-flash-lite"}

@@ -13,7 +13,7 @@ class _FakeVertexClient:
         self.classification = classification
         self.prompts: list[str] = []
 
-    def generate_once(self, prompt: str) -> str:
+    def generate_once(self, prompt: str, model_override: str | None = None) -> str:
         self.prompts.append(prompt)
         return self.classification
 
@@ -32,10 +32,15 @@ class _FakeBigQueryAgent:
         self.result = result
         self.schema_explanation = schema_explanation
         self.questions: list[str] = []
+        self.graph_questions: list[str] = []
         self.describe_schema_calls = 0
 
     def answer(self, question: str) -> BigQueryAgentResult:
         self.questions.append(question)
+        return self.result
+
+    def answer_graph(self, question: str) -> BigQueryAgentResult:
+        self.graph_questions.append(question)
         return self.result
 
     def describe_schema(self) -> str:
@@ -72,6 +77,7 @@ def test_orchestrator_routes_to_bigquery_agent_on_sql_classification() -> None:
         reply="Found 2 row(s).",
         generated_query="SELECT category, count FROM t",
         table=[{"category": "a", "count": 3}, {"category": "b", "count": 5}],
+        query_duration_ms=125,
     )
     orchestrator, chat_agent, bigquery_agent = _make_orchestrator(
         classification="SQL", bigquery_result=bq_result, dataset="my_dataset"
@@ -82,8 +88,56 @@ def test_orchestrator_routes_to_bigquery_agent_on_sql_classification() -> None:
     assert result.reply == "Found 2 row(s)."
     assert result.generated_query == "SELECT category, count FROM t"
     assert result.table == bq_result.table
+    assert result.bigquery_execution_time_ms == 125
     assert result.chart is not None and result.chart["type"] == "bar"
     assert bigquery_agent.questions == ["how many rows per category?"]
+    assert chat_agent.calls == []
+
+
+def test_fast_analytics_question_skips_model_classification() -> None:
+    result = BigQueryAgentResult("Found data.", "SELECT 1", [{"n": 1}])
+    orchestrator, chat_agent, bigquery_agent = _make_orchestrator(
+        classification="CHAT", bigquery_result=result, dataset="my_dataset"
+    )
+
+    orchestrator.handle(Session(session_id="s1"), "What is total revenue by month?")
+
+    assert bigquery_agent.questions == ["What is total revenue by month?"]
+    assert chat_agent.calls == []
+
+
+def test_fast_relationship_question_routes_to_graph_without_classification() -> None:
+    result = BigQueryAgentResult("Found a path.", "SELECT 1", [{"n": 1}])
+    orchestrator, chat_agent, bigquery_agent = _make_orchestrator(
+        classification="CHAT", bigquery_result=result, dataset="my_dataset"
+    )
+
+    orchestrator.handle(Session(session_id="s1"), "How is driver 1 connected to load 9?")
+
+    assert bigquery_agent.graph_questions == ["How is driver 1 connected to load 9?"]
+    assert chat_agent.calls == []
+
+
+def test_orchestrator_routes_to_bigquery_agent_on_graph_classification() -> None:
+    bq_result = BigQueryAgentResult(
+        reply="Found a path through 2 hops.",
+        generated_query="SELECT * FROM GRAPH_TABLE(g MATCH (a)-[]->()-[]->(b) RETURN a.id, b.id)",
+        table=[{"a_id": 1, "b_id": 9}],
+    )
+    orchestrator, chat_agent, bigquery_agent = _make_orchestrator(
+        classification="GRAPH", bigquery_result=bq_result, dataset="my_dataset"
+    )
+
+    result = orchestrator.handle(
+        Session(session_id="s1"), "how is driver 1 connected to customer 9?"
+    )
+
+    assert result.reply == "Found a path through 2 hops."
+    assert result.generated_query == bq_result.generated_query
+    assert result.table == bq_result.table
+    # Routed to the graph path specifically, not the flat-SQL path.
+    assert bigquery_agent.graph_questions == ["how is driver 1 connected to customer 9?"]
+    assert bigquery_agent.questions == []
     assert chat_agent.calls == []
 
 
@@ -105,7 +159,7 @@ def test_orchestrator_routes_to_chat_agent_on_chat_classification() -> None:
 
 def test_orchestrator_falls_back_to_chat_when_classification_raises() -> None:
     class _RaisingVertexClient:
-        def generate_once(self, prompt: str) -> str:
+        def generate_once(self, prompt: str, model_override: str | None = None) -> str:
             raise RuntimeError("boom")
 
     settings = get_settings()

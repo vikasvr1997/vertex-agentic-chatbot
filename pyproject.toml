@@ -15,6 +15,7 @@ dependencies = [
   "google-cloud-aiplatform>=1.70.0",
   "google-cloud-bigquery>=3.25.0",
   "google-auth>=2.34.0",
+  "google-adk>=2.11.0",
   "vertexai>=1.70.0",
   "fastapi>=0.115.0",
   "uvicorn[standard]>=0.30.6",
@@ -57,6 +58,12 @@ claude = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/agentic_chatbot"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"packages/bigquery-agent-kit/src/bigquery_agent_kit" = "bigquery_agent_kit"
+
+[tool.hatch.build]
+dev-mode-dirs = ["src", "packages/bigquery-agent-kit/src"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
@@ -75,8 +82,8 @@ known-first-party = ["agentic_chatbot"]
 
 [tool.mypy]
 python_version = "3.12"
-packages = ["agentic_chatbot"]
-mypy_path = "src"
+packages = ["agentic_chatbot", "bigquery_agent_kit"]
+mypy_path = "src:packages/bigquery-agent-kit/src"
 explicit_package_bases = true
 ignore_missing_imports = true
 disallow_untyped_defs = true
@@ -96,7 +103,7 @@ warn_unused_ignores = false
 minversion = "8.0"
 addopts = "-ra -q --cov=agentic_chatbot --cov-report=term-missing --cov-report=xml"
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "packages/bigquery-agent-kit/src"]
 asyncio_mode = "auto"
 
 [tool.coverage.run]

@@ -1,0 +1,3 @@
+{"question": "What tables are available in this dataset?", "name": "lists-tables", "expect_grounded": true}
+{"question": "How many drivers are there?", "name": "driver-count", "expected_answer": "150", "expect_sql_contains": ["drivers"]}
+{"question": "How many safety incidents are on record?", "name": "safety-incident-count", "expect_sql_contains": ["safety-incidents"]}

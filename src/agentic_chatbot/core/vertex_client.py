@@ -16,13 +16,16 @@ changes, only configuration.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import vertexai
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from agentic_chatbot.config import Settings, get_settings
 from agentic_chatbot.core.auth import ensure_adc
+
+if TYPE_CHECKING:
+    from vertexai.generative_models import GenerativeModel
 from agentic_chatbot.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -110,9 +113,9 @@ class ClaudeModelBackend:
         response = self._client.messages.create(
             model=model_override or self._model_name,
             max_tokens=2048,
-            messages=history,
+            messages=history,  # type: ignore[arg-type]
         )
-        reply = str(response.content[0].text)
+        reply = str(response.content[0].text)  # type: ignore[union-attr]
         history.append({"role": "assistant", "content": reply})
         return reply
 
@@ -140,7 +143,7 @@ class VertexAgentClient:
             location=self._settings.google_cloud_location,
         )
         self._backend: AgentBackend = self._build_backend()
-        self._utility_model: object | None = None
+        self._utility_models: dict[str, GenerativeModel] = {}
 
     def _build_backend(self) -> AgentBackend:
         if self._settings.llm_backend == "claude":
@@ -163,7 +166,7 @@ class VertexAgentClient:
         self._backend.reset_session(session_id)
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
-    def generate_once(self, prompt: str) -> str:
+    def generate_once(self, prompt: str, model_override: str | None = None) -> str:
         """Single-turn, history-free generation — used for classification and
         SQL generation, which must never leak into a user's chat history.
 
@@ -173,7 +176,11 @@ class VertexAgentClient:
         """
         from vertexai.generative_models import GenerativeModel
 
-        if self._utility_model is None:
-            self._utility_model = GenerativeModel(self._settings.vertex_model_name)
-        response = self._utility_model.generate_content(prompt)  # type: ignore[union-attr]
+        model_name = model_override or self._settings.vertex_model_name
+        if model_name not in self._utility_models:
+            self._utility_models[model_name] = GenerativeModel(model_name)
+        response = self._utility_models[model_name].generate_content(
+            prompt,
+            generation_config={"temperature": 0.0, "max_output_tokens": 1024},
+        )
         return str(response.text)

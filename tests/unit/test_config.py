@@ -9,6 +9,7 @@ def test_settings_load_from_env() -> None:
     settings = get_settings()
     assert settings.google_cloud_project == "test-project"
     assert settings.google_cloud_location == "us-central1"
+    assert settings.analytics_model_name == "gemini-2.5-flash-lite"
     assert settings.uses_agent_engine is False
 
 

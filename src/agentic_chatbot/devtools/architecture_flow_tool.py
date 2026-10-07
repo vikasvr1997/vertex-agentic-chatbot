@@ -1044,7 +1044,7 @@ dash_app.layout = html.Div(style={
                      "borderRadius": "10px", "padding": "14px", "marginBottom": "14px"},
              children=[
         html.H4("Message flow", style={"marginTop": 0, "fontSize": "13px", "color": "#8B96B4"}),
-        dash_table.DataTable(
+        dash_table.DataTable(  # type: ignore[attr-defined]
             id="edges-table",
             columns=[
                 {"name": "Order", "id": "order", "type": "numeric", "editable": True},
@@ -1373,7 +1373,7 @@ try:
 except ImportError:  # fall back to Starlette's (deprecated) built-in bridge
     from starlette.middleware.wsgi import WSGIMiddleware  # type: ignore
 
-app.mount("/architecture-tool", WSGIMiddleware(dash_app.server))
+app.mount("/architecture-tool", WSGIMiddleware(dash_app.server))  # type: ignore[arg-type]
 
 
 if __name__ == "__main__":

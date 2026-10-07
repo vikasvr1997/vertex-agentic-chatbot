@@ -31,6 +31,10 @@ class ChatResponse(BaseModel):
     chart: dict[str, Any] | None = Field(
         default=None, description="Chart spec: {type, x, y, title, x_label, y_label}."
     )
+    bigquery_execution_time_ms: int | None = Field(
+        default=None,
+        description="Client-observed BigQuery query and result-fetch duration in milliseconds.",
+    )
 
 
 class HealthResponse(BaseModel):

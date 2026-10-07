@@ -86,6 +86,7 @@ src/agentic_chatbot/
     chainlit_app.py
     rendering.py         Shared Plotly/markdown-table helpers
 tests/                 pytest unit + integration tests
+packages/bigquery-agent-kit/  Standalone, pip-installable BigQuery ADK agent (no UI/app deps)
 openapi/openapi.yaml   Generated OpenAPI spec, audited by 42Crunch in CI
 .github/workflows/     CI, SonarQube, 42Crunch, CodeQL
 .agents/skills/        Runbooks for coding agents (deploy, add tools, security scans)
@@ -145,6 +146,18 @@ gcloud projects add-iam-policy-binding <project-id> \
 Then set `BIGQUERY_DEFAULT_DATASET=your_dataset` in `.env` and restart the
 API. The orchestrator will start classifying messages and routing
 data-shaped questions to the BigQuery agent.
+
+### Reusing just the BigQuery agent in another project
+
+`src/agentic_chatbot/agents/bigquery_agent.py` is wired into this app's
+orchestrator and conversation state. If you only want the schema-grounded,
+read-only BigQuery ADK agent — with no FastAPI, Streamlit, Chainlit, or
+orchestrator dependency — use [`packages/bigquery-agent-kit`](packages/bigquery-agent-kit/README.md)
+instead. It's independently pip-installable (`pip install ./packages/bigquery-agent-kit`
+or straight from Git via its subdirectory), has its own tests, and exposes a
+small API: `BigQueryAgentConfig`, `BigQueryService`, `create_bigquery_agent`,
+and a synchronous `BigQueryAgentWorkflow` wrapper for apps that don't want to
+drive an ADK `Runner` themselves.
 
 ### Going further: separate, A2A-connected GCP agents
 

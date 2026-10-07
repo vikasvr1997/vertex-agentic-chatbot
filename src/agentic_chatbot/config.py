@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     google_cloud_location: str = Field(default="us-central1", alias="GOOGLE_CLOUD_LOCATION")
     vertex_agent_engine_id: str = Field(default="", alias="VERTEX_AGENT_ENGINE_ID")
     vertex_model_name: str = Field(default="gemini-2.5-flash", alias="VERTEX_MODEL_NAME")
+    analytics_model_name: str = Field(default="gemini-2.5-flash-lite", alias="ANALYTICS_MODEL_NAME")
 
     # Optional alternative conversational backend (see core.vertex_client.
     # ClaudeModelBackend). Internal/auxiliary calls (SQL generation,
@@ -56,4 +57,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    # pydantic-settings populates required fields from the environment at
+    # runtime; mypy has no visibility into that without the pydantic plugin,
+    # so it sees the required fields as missing constructor arguments.
+    return Settings()  # type: ignore[call-arg]

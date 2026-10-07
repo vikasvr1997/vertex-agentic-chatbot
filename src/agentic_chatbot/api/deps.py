@@ -55,7 +55,7 @@ def get_bigquery_service() -> BigQueryService:
 
 @lru_cache
 def get_chat_agent() -> ChatAgent:
-    return ChatAgent(get_vertex_client())
+    return ChatAgent(get_settings())
 
 
 @lru_cache

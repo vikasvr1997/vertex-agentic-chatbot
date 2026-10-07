@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bigquery-agent-kit"
+version = "0.1.0"
+description = "Reusable Google ADK agents and guarded workflows for read-only BigQuery analytics."
+requires-python = ">=3.11"
+dependencies = [
+  "google-adk>=2.11.0",
+  "google-cloud-bigquery>=3.25.0",
+  "pydantic>=2.9.2",
+]
+
+[project.optional-dependencies]
+# Only needed to use a non-Google model string, e.g. model="openai/gpt-4o-mini"
+# or model="anthropic/claude-sonnet-4-5", for the agent or an eval judge_model.
+litellm = ["litellm>=1.50.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bigquery_agent_kit"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

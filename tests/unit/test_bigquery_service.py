@@ -54,6 +54,24 @@ def test_validate_read_only_rejects_select_smuggling_write_keyword() -> None:
     validate_read_only("SELECT drop_rate FROM dataset.table")
 
 
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT 'Drop' AS revenue_trend",
+        'SELECT "delete" AS label',
+        "-- DROP TABLE is not executed\nSELECT 1",
+        "SELECT `dataset.drop_table` FROM `project.dataset.table`",
+    ],
+)
+def test_validate_read_only_ignores_keywords_inside_quoted_text_and_comments(sql: str) -> None:
+    validate_read_only(sql)
+
+
+def test_validate_read_only_still_rejects_write_keyword_after_select() -> None:
+    with pytest.raises(ReadOnlyQueryError):
+        validate_read_only("SELECT 1 -- harmless comment\nDROP TABLE dataset.table")
+
+
 class _FakeJob:
     def __init__(self, rows: list[dict[str, object]]) -> None:
         self._rows = rows
@@ -67,7 +85,12 @@ class _FakeBigQueryClient:
         self.rows = rows
         self.queries: list[str] = []
 
-    def query(self, sql: str, job_config: object = None) -> _FakeJob:
+    def query(
+        self,
+        sql: str,
+        job_config: object = None,
+        location: str | None = None,
+    ) -> _FakeJob:
         self.queries.append(sql)
         return _FakeJob(self.rows)
 
@@ -91,5 +114,39 @@ def test_clear_schema_cache_forces_refetch() -> None:
     service.describe_dataset("ds")
     service.clear_schema_cache()
     service.describe_dataset("ds")
+
+    assert len(client.queries) == 2
+
+
+def test_describe_graphs_caches_ddl() -> None:
+    rows = [{"ddl": "CREATE PROPERTY GRAPH `ds.g` NODE TABLES (t KEY (id))"}]
+    client = _FakeBigQueryClient(rows)
+    service = BigQueryService(get_settings(), client=client)
+
+    first = service.describe_graphs("ds")
+    second = service.describe_graphs("ds")
+
+    assert first == second
+    assert "CREATE PROPERTY GRAPH" in first
+    assert len(client.queries) == 1
+
+
+def test_describe_graphs_returns_placeholder_when_none_defined() -> None:
+    client = _FakeBigQueryClient(rows=[])
+    service = BigQueryService(get_settings(), client=client)
+
+    result = service.describe_graphs("ds")
+
+    assert "No property graphs found" in result
+
+
+def test_clear_schema_cache_also_forces_graph_refetch() -> None:
+    rows = [{"ddl": "CREATE PROPERTY GRAPH `ds.g` NODE TABLES (t KEY (id))"}]
+    client = _FakeBigQueryClient(rows)
+    service = BigQueryService(get_settings(), client=client)
+
+    service.describe_graphs("ds")
+    service.clear_schema_cache()
+    service.describe_graphs("ds")
 
     assert len(client.queries) == 2

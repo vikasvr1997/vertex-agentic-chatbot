@@ -70,7 +70,12 @@ def main():
 
     project_id = outputs["project_id"]["value"]
     schema_hash = outputs["schema_hash"]["value"]
-    local_ddl = outputs["local_ddl_queries"]["value"]
+    # One deploy job (and one DDL string) per dataset location -- see the
+    # comment on google_bigquery_job.deploy_local_graphs in
+    # graph_automation.tf for why a single job can't span locations. Joined
+    # here purely for archival in graph_version_history; rollback.py replays
+    # each location's DDL separately.
+    local_ddl = "\n".join(outputs["local_ddl_by_location"]["value"].values())
     master_ddl = outputs["master_ddl_query"]["value"]
     relationship_report = json.loads(outputs["relationship_report_json"]["value"])
 

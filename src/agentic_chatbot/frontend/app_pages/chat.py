@@ -12,6 +12,7 @@ bottom "Settings" popover rather than always-expanded panels.
 
 from __future__ import annotations
 
+import time
 import uuid
 from typing import Any
 
@@ -27,6 +28,12 @@ _CURATED_MODELS = [
     "gemini-2.5-flash-lite",
 ]
 _TITLE_MAX_LEN = 40
+
+
+def _format_duration(elapsed_ms: int) -> str:
+    minutes, remaining_ms = divmod(elapsed_ms, 60_000)
+    seconds, milliseconds = divmod(remaining_ms, 1_000)
+    return f"{minutes}:{seconds:02d}:{milliseconds:03d}"
 
 
 def _new_conversation() -> dict[str, Any]:
@@ -58,7 +65,12 @@ def _delete_conversation(conv_id: str) -> None:
         st.session_state.active_conv_id = next(iter(st.session_state.conversations))
 
 
-def _render_result(result: dict[str, Any], key_suffix: str) -> None:
+def _render_result(
+    result: dict[str, Any],
+    key_suffix: str,
+    response_time_ms: int | None = None,
+    bigquery_execution_time_ms: int | None = None,
+) -> None:
     st.markdown(str(result["reply"]))
 
     generated_query = result.get("generated_query")
@@ -79,7 +91,16 @@ def _render_result(result: dict[str, Any], key_suffix: str) -> None:
 
     chart = result.get("chart")
     if chart:
-        st.plotly_chart(build_plotly_figure(chart), width="stretch")
+        st.plotly_chart(
+            build_plotly_figure(chart),
+            width="stretch",
+            key=f"assistant_chart_{key_suffix}",
+        )
+
+    if bigquery_execution_time_ms is not None:
+        st.caption(f"BigQuery execution time: {_format_duration(bigquery_execution_time_ms)}")
+    if response_time_ms is not None:
+        st.caption(f"Response time: {_format_duration(response_time_ms)}")
 
 
 _init_state()
@@ -137,7 +158,12 @@ conv = _active_conversation()
 for i, msg in enumerate(conv["messages"]):
     with st.chat_message(msg["role"]):
         if msg["role"] == "assistant":
-            _render_result(msg["result"], key_suffix=f"{st.session_state.active_conv_id}_{i}")
+            _render_result(
+                msg["result"],
+                key_suffix=f"{st.session_state.active_conv_id}_{i}",
+                response_time_ms=msg.get("response_time_ms"),
+                bigquery_execution_time_ms=msg.get("bigquery_execution_time_ms"),
+            )
         else:
             st.markdown(msg["content"])
 
@@ -150,13 +176,27 @@ if prompt:
         st.markdown(prompt)
 
     with st.chat_message("assistant"), st.spinner("Thinking..."):
+        started_at_ns = time.perf_counter_ns()
         try:
             result = send_message(prompt, conv["backend_session_id"], model_override=model_override)
         except Exception as exc:  # noqa: BLE001 — surface any backend error to the user
             st.error(f"Backend error: {exc}")
+            elapsed_ms = (time.perf_counter_ns() - started_at_ns) // 1_000_000
+            st.caption(f"Response time: {_format_duration(elapsed_ms)}")
         else:
+            elapsed_ms = (time.perf_counter_ns() - started_at_ns) // 1_000_000
             conv["backend_session_id"] = result["session_id"]
-            conv["messages"].append({"role": "assistant", "result": result})
+            conv["messages"].append(
+                {
+                    "role": "assistant",
+                    "result": result,
+                    "response_time_ms": elapsed_ms,
+                    "bigquery_execution_time_ms": result.get("bigquery_execution_time_ms"),
+                }
+            )
             _render_result(
-                result, key_suffix=f"{st.session_state.active_conv_id}_{len(conv['messages']) - 1}"
+                result,
+                key_suffix=f"{st.session_state.active_conv_id}_{len(conv['messages']) - 1}",
+                response_time_ms=elapsed_ms,
+                bigquery_execution_time_ms=result.get("bigquery_execution_time_ms"),
             )

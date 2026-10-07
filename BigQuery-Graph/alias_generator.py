@@ -53,7 +53,7 @@ def _ask_gemini(model, table_name, columns):
     )
     response = model.generate_content(prompt)
     text = response.text.strip()
-    text = re.sub(r"^```(json)?|```$", "", text, flags=re.MULTILINE).strip()
+    text = re.sub(r"(?:^```(?:json)?)|(?:```$)", "", text, flags=re.MULTILINE).strip()
     return json.loads(text)
 
 
@@ -66,7 +66,7 @@ def generate_aliases_for_dataset(project_id, dataset_id, tables, vertex_location
     if _VERTEX_AVAILABLE:
         try:
             vertexai.init(project=project_id, location=vertex_location)
-            model = GenerativeModel("gemini-1.5-flash")
+            model = GenerativeModel("gemini-2.5-flash")
         except Exception:
             model = None
 

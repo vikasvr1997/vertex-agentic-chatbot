@@ -25,6 +25,9 @@ env/
 # Dev flow-visualizer local state (developer debugging tool, not product data)
 dev_data/
 
+# `adk web` local session storage (runtime artifact, not source)
+.adk/
+
 # Test / coverage / lint caches
 .pytest_cache/
 .mypy_cache/
@@ -52,3 +55,18 @@ htmlcov/
 /.ignore
 /.mcp.json
 /.claude/
+
+# Terraform local state/artifacts — never commit state (can expose resource
+# details) or the downloaded provider cache (large, regenerable via
+# `terraform init`). The lock file (.terraform.lock.hcl) IS committed.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

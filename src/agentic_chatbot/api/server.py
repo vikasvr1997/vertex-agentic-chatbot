@@ -19,7 +19,7 @@ from agentic_chatbot.logging_config import configure_logging
 try:
     from a2wsgi import WSGIMiddleware
 except ImportError:  # pragma: no cover - fallback to Starlette's deprecated bridge
-    from starlette.middleware.wsgi import WSGIMiddleware
+    from starlette.middleware.wsgi import WSGIMiddleware  # type: ignore[assignment]
 
 configure_logging()
 
@@ -43,7 +43,7 @@ app.include_router(schema_router)
 # server or port. Purely a dev aid; not part of the chat product above.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(_flow_tool_api_router, prefix="/architecture-tool/api")
-app.mount("/architecture-tool", WSGIMiddleware(_flow_tool_dash_app.server))
+app.mount("/architecture-tool", WSGIMiddleware(_flow_tool_dash_app.server))  # type: ignore[arg-type]
 
 
 @app.get("/health", response_model=HealthResponse, tags=["ops"])

@@ -42,4 +42,5 @@ def send_chat_message(
         generated_query=result.generated_query,
         table=result.table,
         chart=result.chart,
+        bigquery_execution_time_ms=result.bigquery_execution_time_ms,
     )

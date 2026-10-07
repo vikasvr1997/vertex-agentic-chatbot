@@ -10,12 +10,17 @@ output "schema_changed" {
   value = data.external.graph_generator.result["schema_changed"]
 }
 
-output "local_ddl_queries" {
-  value = data.external.graph_generator.result["local_ddl_queries"]
+output "local_ddl_by_location" {
+  value = local.local_ddl_by_location
 }
 
 output "master_ddl_query" {
   value = data.external.graph_generator.result["master_ddl_query"]
+}
+
+output "datasets_excluded_from_master" {
+  value       = data.external.graph_generator.result["datasets_excluded_from_master_json"]
+  description = "Datasets whose location differs from var.region (the governance dataset's location) and so couldn't be folded into the master graph"
 }
 
 output "relationship_report_json" {
